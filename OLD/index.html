@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>My Betting Journal</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #020617; color: #fff; }
+    .app { min-height: 100vh; background: radial-gradient(circle at center, rgba(5,43,34,0.9) 0%, rgba(3,17,31,0.95) 35%, #020617 70%); padding: 12px; }
+    .phone { max-width: 390px; margin: 0 auto; }
+    .panel, .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; }
+    .panel { padding: 12px; }
+    .topline { font-size: 11px; text-transform: uppercase; letter-spacing: 0.18em; color: rgba(255,255,255,0.55); margin-bottom: 4px; }
+    h1 { margin: 0; font-size: 20px; font-weight: 700; }
+    .badge { background: #fbbf24; color: #000; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .card { padding: 10px; }
+    .label-mini { font-size: 11px; color: rgba(255,255,255,0.65); margin-bottom: 4px; }
+    .value { font-size: 18px; font-weight: 700; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 10px; background: rgba(0,0,0,0.25); padding: 6px; border-radius: 18px; }
+    .tab { border: none; border-radius: 14px; padding: 10px 6px; background: transparent; color: rgba(255,255,255,0.7); font-weight: 600; font-size: 13px; cursor: pointer; }
+    .tab.active { background: rgba(255,255,255,0.12); color: #fff; }
+    .section { margin-top: 10px; }
+    .section-title { margin: 0 0 8px 0; font-size: 16px; }
+    .form-grid { display: grid; gap: 8px; }
+    label { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.95); display: block; margin-bottom: 4px; }
+    input, select { width: 100%; height: 38px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.28); color: #fff; padding: 0 12px; outline: none; font-size: 14px; }
+    option { background: #020617; color: #fff; }
+    input::placeholder { color: rgba(255,255,255,0.35); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .result-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .choice { border: none; border-radius: 14px; padding: 9px 6px; background: rgba(0,0,0,0.28); color: rgba(255,255,255,0.8); font-size: 12px; font-weight: 600; cursor: pointer; }
+    .choice.active, .primary, .filter-btn.active { background: #fbbf24; color: #000; }
+    .primary { width: 100%; border: none; border-radius: 14px; height: 40px; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .history-tools { display: grid; gap: 8px; }
+    .filter-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .filter-btn { border: none; border-radius: 12px; padding: 8px 4px; font-size: 11px; background: rgba(0,0,0,0.28); color: rgba(255,255,255,0.75); text-transform: capitalize; cursor: pointer; }
+    .bet-list { display: grid; gap: 8px; }
+    .bet-title { font-size: 14px; font-weight: 700; margin: 2px 0; }
+    .muted { color: rgba(255,255,255,0.6); font-size: 12px; }
+    .pill { padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: capitalize; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); }
+    .pill.won { background: rgba(34,197,94,0.18); color: #86efac; }
+    .pill.lost { background: rgba(239,68,68,0.18); color: #fca5a5; }
+    .pill.void { background: rgba(59,130,246,0.18); color: #93c5fd; }
+    .bet-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+    .mini { background: rgba(0,0,0,0.28); border-radius: 14px; padding: 8px; }
+    .mini .muted { font-size: 11px; }
+    .mini strong { font-size: 13px; }
+    .bet-actions { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; }
+    .danger { background: rgba(239,68,68,0.16); color: #fca5a5; border: none; border-radius: 14px; font-weight: 700; font-size: 12px; cursor: pointer; }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .empty { text-align: center; color: rgba(255,255,255,0.6); padding: 18px; }
+    .file-label { display: flex; align-items: center; justify-content: center; height: 40px; border-radius: 14px; background: rgba(255,255,255,0.1); font-size: 14px; font-weight: 700; cursor: pointer; }
+    .status-line { margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.65); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="phone">
+      <div class="panel">
+        <div class="row-between">
+          <div>
+            <div class="topline">Bet Tracker</div>
+            <h1>My Betting Journal</h1>
+          </div>
+          <div class="badge">FRW</div>
+        </div>
+
+        <div class="stats">
+          <div class="card">
+            <div class="label-mini">Balance</div>
+            <div class="value" id="balanceValue">400 FRW</div>
+          </div>
+          <div class="card">
+            <div class="label-mini">Profit</div>
+            <div class="value" id="profitValue">+0 FRW</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="add" type="button">Add</button>
+          <button class="tab" data-tab="history" type="button">History</button>
+          <button class="tab" data-tab="stats" type="button">Stats</button>
+        </div>
+        <div class="status-line" id="syncStatus">Connecting...</div>
+      </div>
+
+      <div class="section" id="tab-add">
+        <div class="card">
+          <h2 class="section-title">Add New Bet</h2>
+          <form id="betForm" class="form-grid">
+            <div>
+              <label for="date">Date</label>
+              <input type="date" id="date" required />
+            </div>
+
+            <div>
+              <label for="bookmaker">Bookmaker</label>
+              <select id="bookmaker">
+                <option>Winner</option>
+                <option>BetPawa</option>
+                <option>Gorilla</option>
+                <option>Forzza</option>
+                <option>Fortebet</option>
+                <option>1xBet</option>
+                <option>Paripesa</option>
+              </select>
+            </div>
+
+            <div class="grid-2">
+              <div>
+                <label for="odds">Odds</label>
+                <input type="number" id="odds" step="0.01" placeholder="2.40" required />
+              </div>
+              <div>
+                <label for="stake">Stake (FRW)</label>
+                <input type="number" id="stake" placeholder="2000" required />
+              </div>
+            </div>
+
+            <div>
+              <label>Result</label>
+              <div class="result-grid">
+                <button type="button" class="choice active" data-result="pending">Pending</button>
+                <button type="button" class="choice" data-result="won">Won</button>
+                <button type="button" class="choice" data-result="lost">Lost</button>
+                <button type="button" class="choice" data-result="void">Void</button>
+              </div>
+            </div>
+
+            <div>
+              <label for="notes">Notes</label>
+              <input type="text" id="notes" placeholder="Optional note" />
+            </div>
+
+            <button type="submit" class="primary">Save Bet</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="section" id="tab-history" style="display:none;">
+        <div class="card history-tools">
+          <input type="text" id="search" placeholder="Search notes or bookmaker..." />
+          <div class="filter-grid">
+            <button class="filter-btn active" data-filter="all" type="button">all</button>
+            <button class="filter-btn" data-filter="pending" type="button">pending</button>
+            <button class="filter-btn" data-filter="won" type="button">won</button>
+            <button class="filter-btn" data-filter="lost" type="button">lost</button>
+            <button class="filter-btn" data-filter="void" type="button">void</button>
+          </div>
+        </div>
+        <div class="bet-list" id="betList"></div>
+      </div>
+
+      <div class="section" id="tab-stats" style="display:none;">
+        <div class="card">
+          <h2 class="section-title">Bankroll</h2>
+          <label for="startingBankroll">Starting Bankroll (FRW)</label>
+          <input type="number" id="startingBankroll" value="20000" />
+        </div>
+
+        <div class="section stats-grid" id="statsGrid"></div>
+
+        <div class="section card">
+          <h2 class="section-title">Backup</h2>
+          <button class="primary" id="exportBtn" type="button">Export Backup</button>
+          <div style="height:8px"></div>
+          <label class="file-label" for="importFile">Import Backup</label>
+          <input type="file" id="importFile" accept="application/json" style="display:none;" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCbWeuZkZAQJjMUT0-Tva7QNMX6nm70Rro",
+      authDomain: "bet-tracker-cfa64.firebaseapp.com",
+      projectId: "bet-tracker-cfa64",
+      storageBucket: "bet-tracker-cfa64.firebasestorage.app",
+      messagingSenderId: "883702763088",
+      appId: "1:883702763088:web:d6e3d8aa47589bd4890b55",
+      measurementId: "G-7KBYWBPE88"
+    };
+
+    const STORAGE_KEY = 'iphone-bet-tracker-html-v2';
+    let bets = [];
+    let selectedResult = 'pending';
+    let currentFilter = 'all';
+    let syncMode = 'local';
+    let db = null;
+
+    const el = {
+      date: document.getElementById('date'),
+      bookmaker: document.getElementById('bookmaker'),
+      odds: document.getElementById('odds'),
+      stake: document.getElementById('stake'),
+      notes: document.getElementById('notes'),
+      form: document.getElementById('betForm'),
+      betList: document.getElementById('betList'),
+      search: document.getElementById('search'),
+      balanceValue: document.getElementById('balanceValue'),
+      profitValue: document.getElementById('profitValue'),
+      startingBankroll: document.getElementById('startingBankroll'),
+      statsGrid: document.getElementById('statsGrid'),
+      exportBtn: document.getElementById('exportBtn'),
+      importFile: document.getElementById('importFile'),
+      syncStatus: document.getElementById('syncStatus')
+    };
+
+    function today() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function formatMoney(value) {
+      return new Intl.NumberFormat('en-RW', { maximumFractionDigits: 0 }).format(Number(value || 0));
+    }
+
+    function computeProfit(stake, odds, result) {
+      const s = Number(stake || 0);
+      const o = Number(odds || 0);
+      if (!s || !o) return 0;
+      if (result === 'won') return s * o - s;
+      if (result === 'lost') return -s;
+      return 0;
+    }
+
+    function saveLocal() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        bets,
+        startingBankroll: Number(el.startingBankroll.value || 20000)
+      }));
+    }
+
+    function loadLocal() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        bets = Array.isArray(parsed.bets) ? parsed.bets : [];
+        el.startingBankroll.value = Number(parsed.startingBankroll || 20000);
+      } catch (e) {}
+    }
+
+    function stats() {
+      const settled = bets.filter(b => b.result !== 'pending');
+      const won = settled.filter(b => b.result === 'won').length;
+      const lost = settled.filter(b => b.result === 'lost').length;
+      const totalStaked = settled.reduce((sum, b) => sum + Number(b.stake || 0), 0);
+      const profit = settled.reduce((sum, b) => sum + computeProfit(b.stake, b.odds, b.result), 0);
+      const balance = Number(el.startingBankroll.value || 20000) + profit;
+      const roi = totalStaked > 0 ? ((profit / totalStaked) * 100) : 0;
+      return { totalBets: bets.length, settled: settled.length, won, lost, totalStaked, profit, balance, roi };
+    }
+
+    function renderTopStats() {
+      const s = stats();
+      el.balanceValue.textContent = `${formatMoney(s.balance)} FRW`;
+      el.profitValue.textContent = `${s.profit >= 0 ? '+' : ''}${formatMoney(s.profit)} FRW`;
+    }
+
+    function renderStatsPage() {
+      const s = stats();
+      const items = [
+        ['Total Bets', s.totalBets],
+        ['Settled', s.settled],
+        ['Won', s.won],
+        ['Lost', s.lost],
+        ['Staked', `${formatMoney(s.totalStaked)} FRW`],
+        ['ROI', `${s.roi.toFixed(1)}%`]
+      ];
+      el.statsGrid.innerHTML = items.map(([label, value]) => `
+        <div class="card">
+          <div class="muted">${label}</div>
+          <div class="value" style="font-size:17px;margin-top:4px;">${value}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderHistory() {
+      const q = el.search.value.trim().toLowerCase();
+      const list = bets
+        .filter(b => currentFilter === 'all' ? true : b.result === currentFilter)
+        .filter(b => [b.bookmaker, b.notes].join(' ').toLowerCase().includes(q))
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      if (!list.length) {
+        el.betList.innerHTML = `<div class="card empty">No bets found.</div>`;
+        return;
+      }
+
+      el.betList.innerHTML = list.map(bet => {
+        const profit = computeProfit(bet.stake, bet.odds, bet.result);
+        return `
+          <div class="card">
+            <div class="row-between">
+              <div>
+                <div class="muted">${bet.date} • ${bet.bookmaker || 'Winner'}</div>
+                <div class="bet-title">Bet Entry</div>
+                <div class="muted">Manual record</div>
+              </div>
+              <div class="pill ${bet.result}">${bet.result}</div>
+            </div>
+
+            <div class="bet-stats">
+              <div class="mini">
+                <div class="muted">Odds</div>
+                <strong>${bet.odds}</strong>
+              </div>
+              <div class="mini">
+                <div class="muted">Stake</div>
+                <strong>${formatMoney(bet.stake)} FRW</strong>
+              </div>
+              <div class="mini">
+                <div class="muted">P/L</div>
+                <strong>${profit >= 0 ? '+' : ''}${formatMoney(profit)} FRW</strong>
+              </div>
+            </div>
+
+            ${bet.notes ? `<div class="muted" style="margin-top:8px;">${bet.notes}</div>` : ''}
+
+            <div class="bet-actions">
+              <button class="choice ${bet.result === 'pending' ? 'active' : ''}" type="button" onclick="window.updateResult('${bet.id}','pending')">Pending</button>
+              <button class="choice ${bet.result === 'won' ? 'active' : ''}" type="button" onclick="window.updateResult('${bet.id}','won')">Won</button>
+              <button class="choice ${bet.result === 'lost' ? 'active' : ''}" type="button" onclick="window.updateResult('${bet.id}','lost')">Lost</button>
+              <button class="choice ${bet.result === 'void' ? 'active' : ''}" type="button" onclick="window.updateResult('${bet.id}','void')">Void</button>
+              <button class="danger" type="button" onclick="window.deleteBet('${bet.id}')">Del</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderAll() {
+      renderTopStats();
+      renderStatsPage();
+      renderHistory();
+      saveLocal();
+    }
+
+    function resetForm() {
+      el.date.value = today();
+      el.bookmaker.value = 'Winner';
+      el.odds.value = '';
+      el.stake.value = '';
+      el.notes.value = '';
+      selectedResult = 'pending';
+      document.querySelectorAll('[data-result]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.result === 'pending');
+      });
+    }
+
+    async function syncLoad() {
+      if (!db) {
+        loadLocal();
+        renderAll();
+        el.syncStatus.textContent = 'Local mode';
+        return;
+      }
+      try {
+        const snap = await db.collection('bets').get();
+        bets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        syncMode = 'firebase';
+        el.syncStatus.textContent = 'Firebase sync active';
+        renderAll();
+      } catch (err) {
+        loadLocal();
+        renderAll();
+        el.syncStatus.textContent = 'Firebase failed, using local mode';
+      }
+    }
+
+    window.updateResult = async function(id, result) {
+      const idx = bets.findIndex(b => b.id === id);
+      if (idx === -1) return;
+      const previous = bets[idx].result;
+      bets[idx].result = result;
+      renderAll();
+      try {
+        if (syncMode === 'firebase' && db) {
+          await db.collection('bets').doc(id).update({ result: result });
+        }
+      } catch (err) {
+        bets[idx].result = previous;
+        renderAll();
+        alert('Failed to update this bet online.');
+      }
+    };
+
+    window.deleteBet = async function(id) {
+      const previous = [...bets];
+      bets = bets.filter(b => b.id !== id);
+      renderAll();
+      try {
+        if (syncMode === 'firebase' && db) {
+          await db.collection('bets').doc(id).delete();
+        }
+      } catch (err) {
+        bets = previous;
+        renderAll();
+        alert('Failed to delete this bet online.');
+      }
+    };
+
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const tab = this.dataset.tab;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById('tab-add').style.display = tab === 'add' ? 'block' : 'none';
+        document.getElementById('tab-history').style.display = tab === 'history' ? 'block' : 'none';
+        document.getElementById('tab-stats').style.display = tab === 'stats' ? 'block' : 'none';
+      });
+    });
+
+    document.querySelectorAll('[data-result]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        selectedResult = this.dataset.result;
+        document.querySelectorAll('[data-result]').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+      });
+    });
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        currentFilter = this.dataset.filter;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        renderHistory();
+      });
+    });
+
+    el.form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const odds = Number(el.odds.value || 0);
+      const stake = Number(el.stake.value || 0);
+      if (!odds || !stake) return;
+
+      const newBet = {
+        date: el.date.value,
+        bookmaker: el.bookmaker.value,
+        odds: odds,
+        stake: stake,
+        result: selectedResult,
+        notes: el.notes.value.trim()
+      };
+
+      try {
+        if (syncMode === 'firebase' && db) {
+          const ref = await db.collection('bets').add(newBet);
+          bets.unshift({ id: ref.id, ...newBet });
+        } else {
+          bets.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7), ...newBet });
+        }
+        resetForm();
+        renderAll();
+        document.querySelector('[data-tab="history"]').click();
+      } catch (err) {
+        alert('Failed to save this bet.');
+      }
+    });
+
+    el.search.addEventListener('input', renderHistory);
+    el.startingBankroll.addEventListener('input', renderAll);
+
+    el.exportBtn.addEventListener('click', function() {
+      const blob = new Blob([JSON.stringify({ startingBankroll: Number(el.startingBankroll.value || 20000), bets: bets }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'bet-tracker-backup.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    el.importFile.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function() {
+        try {
+          const parsed = JSON.parse(reader.result);
+          bets = Array.isArray(parsed.bets) ? parsed.bets : [];
+          el.startingBankroll.value = Number(parsed.startingBankroll || 20000);
+          renderAll();
+        } catch (err) {
+          alert('Invalid backup file.');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      syncMode = 'firebase';
+    } catch (err) {
+      syncMode = 'local';
+    }
+
+    resetForm();
+    renderAll();
+    syncLoad();
+  </script>
+</body>
+</html>
