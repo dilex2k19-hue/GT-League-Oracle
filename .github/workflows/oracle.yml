@@ -25,5 +25,7 @@ jobs:
 
       - name: Run The Oracle
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }} # We will hide your DB password here
-        run: python telegram_bot.py
+          DATABASE_URL: ${{ secrets.DATABASE_URL }} 
+        run: |
+          python harvester.py
+          python telegram_bot.py
