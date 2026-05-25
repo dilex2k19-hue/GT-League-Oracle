@@ -147,7 +147,14 @@ def grade_past_predictions():
                 cursor.execute("UPDATE predictions SET status = %s WHERE id = %s", (new_status, p['id']))
                 conn.commit()
                 
+                # Convert the database UTC time back to CAT for the message
+                db_utc = p['kickoff_utc']
+                if db_utc.tzinfo is None:
+                    db_utc = db_utc.replace(tzinfo=timezone.utc)
+                kickoff_cat = db_utc.astimezone(CAT_TZ).strftime("%H:%M CAT")
+                
                 results_message += f"{icon} <b>{p['prediction']}</b> ({p['home_player']} vs {p['away_player']})\n"
+                results_message += f"⏰ Match Time: {kickoff_cat}\n"
                 results_message += f"Score: {h_score} - {a_score}\n\n"
                 updates_found = True
                 break
