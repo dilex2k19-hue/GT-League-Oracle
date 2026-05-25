@@ -125,8 +125,11 @@ def grade_past_predictions():
             except Exception:
                 continue
             
-            # 2. Time-Lock: Check Names AND Exact Kickoff Time
-            if p['home_player'] == h_player and p['away_player'] == a_player and db_time == m_time:
+            # 2. Time-Lock: Check Names AND ensure kickoff is within a 15-minute window
+            time_difference = abs((db_time - m_time).total_seconds())
+            max_drift_seconds = 15 * 60 # 15 minutes
+            
+            if p['home_player'] == h_player and p['away_player'] == a_player and time_difference <= max_drift_seconds:
                 h_score = m['result']['stats']['home_score']
                 a_score = m['result']['stats']['away_score']
                 total_goals = h_score + a_score
