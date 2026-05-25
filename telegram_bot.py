@@ -118,8 +118,15 @@ def grade_past_predictions():
             h_player = m['participants'][0]['participant']['player']['nickname']
             a_player = m['participants'][1]['participant']['player']['nickname']
             
-            # If we found the exact match
-            if p['home_player'] == h_player and p['away_player'] == a_player:
+            # 1. Extract and format the API match time safely
+            try:
+                m_time = datetime.strptime(m['kickoff'], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=None)
+                db_time = p['kickoff_utc'].replace(tzinfo=None)
+            except Exception:
+                continue
+            
+            # 2. Time-Lock: Check Names AND Exact Kickoff Time
+            if p['home_player'] == h_player and p['away_player'] == a_player and db_time == m_time:
                 h_score = m['result']['stats']['home_score']
                 a_score = m['result']['stats']['away_score']
                 total_goals = h_score + a_score
