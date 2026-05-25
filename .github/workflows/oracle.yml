@@ -1,8 +1,6 @@
 name: GT League Oracle Bot
 
 on:
-  schedule:
-    - cron: '*/30 * * * *'  # This tells GitHub to run every 30 minutes!
   workflow_dispatch:        # This adds a button so you can run it manually to test!
 
 jobs:
