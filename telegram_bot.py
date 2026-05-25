@@ -280,6 +280,15 @@ def run_pipeline():
     setup_database()
     grade_past_predictions() # Step 1: Grade the past
     
+    # --- NEW: THE ANTI-SPAM FILTER MEMORY ---
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute("SELECT home_player, away_player FROM predictions WHERE status = 'Pending';")
+    pending_matchups = {(row['home_player'], row['away_player']) for row in cursor.fetchall()}
+    cursor.close()
+    conn.close()
+    # ----------------------------------------
+    
     print("📡 Scanning GT Leagues for new upcoming setups...")
     now_utc = datetime.now(timezone.utc)
     start_of_day = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -310,6 +319,11 @@ def run_pipeline():
             if now_utc <= kickoff_utc <= target_window:
                 home_player = match['participants'][0]['participant']['player']['nickname']
                 away_player = match['participants'][1]['participant']['player']['nickname']
+                
+                # --- NEW: SKIP IF ALREADY PREDICTED ---
+                if (home_player, away_player) in pending_matchups:
+                    continue
+                # --------------------------------------
                 
                 probs = get_predictions(home_player, away_player)
                 if probs:
