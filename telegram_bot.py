@@ -76,13 +76,10 @@ def send_telegram_message(target_chat_id, message):
 # 3. THE FEEDBACK LOOP (RESULT CHECKER)
 # ---------------------------------------------------------
 def grade_past_predictions():
-    """Checks if our past predictions won or lost."""
+    """Checks if our past predictions won or lost and routes them to the correct channel."""
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
-    # Get all pending predictions from the past 24 hours
-    # Only select pending matches that kicked off more than 45 minutes ago
-    # This prevents the bot from mixing up games currently being played
     shield_time = datetime.now(timezone.utc) - timedelta(minutes=45)
     
     cursor.execute(
@@ -98,7 +95,6 @@ def grade_past_predictions():
 
     print("🔍 Checking results of past predictions...")
     
-    # Pull finished matches from GT Leagues API
     now_utc = datetime.now(timezone.utc)
     start_of_day = now_utc - timedelta(days=1)
     time_str = f"between:{start_of_day.strftime('%Y-%m-%dT%H:%M:%S.000Z')},{now_utc.strftime('%Y-%m-%dT%H:%M:%S.999Z')}"
@@ -109,7 +105,7 @@ def grade_past_predictions():
         "Origin": "https://www.gtleagues.com",
         "Referer": "https://www.gtleagues.com/"
     }
-    params = {"kickoff": time_str, "limit": 1000, "status": "in:3"} # 3 = Finished
+    params = {"kickoff": time_str, "limit": 1000, "status": "in:3"}
     
     response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
@@ -117,31 +113,32 @@ def grade_past_predictions():
         
     finished_matches = response.json()
     
-    results_message = "📊 <b>ORACLE RESULT UPDATE</b> 📊\n\n"
-    updates_found = False
+    # --- INDEPENDENT RESULT BOARDS ---
+    goals_message = "📊 <b>OVER 2.5 RESULT UPDATE</b> 📊\n\n"
+    winners_message = "📊 <b>MATCH WINNER RESULT UPDATE</b> 📊\n\n"
+    
+    goals_updated = False
+    winners_updated = False
     
     for p in pending:
         for m in finished_matches:
             h_player = m['participants'][0]['participant']['player']['nickname']
             a_player = m['participants'][1]['participant']['player']['nickname']
             
-            # 1. Extract and format the API match time safely
             try:
                 m_time = datetime.strptime(m['kickoff'], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=None)
                 db_time = p['kickoff_utc'].replace(tzinfo=None)
             except Exception:
                 continue
             
-            # 2. Time-Lock: Check Names AND ensure kickoff is within a 15-minute window
             time_difference = abs((db_time - m_time).total_seconds())
-            max_drift_seconds = 15 * 60 # 15 minutes
+            max_drift_seconds = 15 * 60
             
             if p['home_player'] == h_player and p['away_player'] == a_player and time_difference <= max_drift_seconds:
                 h_score = m['result']['stats']['home_score']
                 a_score = m['result']['stats']['away_score']
                 total_goals = h_score + a_score
                 
-                # Grade the prediction
                 won = False
                 if p['prediction'] == 'Home Win' and h_score > a_score: won = True
                 elif p['prediction'] == 'Away Win' and a_score > h_score: won = True
@@ -150,29 +147,37 @@ def grade_past_predictions():
                 new_status = "Won" if won else "Lost"
                 icon = "✅" if won else "❌"
                 
-                # Update Database
                 cursor.execute("UPDATE predictions SET status = %s WHERE id = %s", (new_status, p['id']))
                 conn.commit()
                 
-                # Convert the database UTC time back to CAT for the message
                 db_utc = p['kickoff_utc']
                 if db_utc.tzinfo is None:
                     db_utc = db_utc.replace(tzinfo=timezone.utc)
                 kickoff_cat = db_utc.astimezone(CAT_TZ).strftime("%H:%M CAT")
                 
-                results_message += f"{icon} <b>{p['prediction']}</b> ({p['home_player']} vs {p['away_player']})\n"
-                results_message += f"⏰ Match Time: {kickoff_cat}\n"
-                results_message += f"Score: {h_score} - {a_score}\n\n"
-                updates_found = True
+                # Format the specific result text
+                result_text = f"{icon} <b>{p['prediction']}</b> ({p['home_player']} vs {p['away_player']})\n"
+                result_text += f"⏰ Match Time: {kickoff_cat}\n"
+                result_text += f"Score: {h_score} - {a_score}\n\n"
+                
+                # Route the text to the correct message board
+                if p['prediction'] == 'Over 2.5':
+                    goals_message += result_text
+                    goals_updated = True
+                else:
+                    winners_message += result_text
+                    winners_updated = True
+                    
                 break
 
     cursor.close()
     conn.close()
     
-    if updates_found:
-        # Broadcast the exact same results summary to both channels simultaneously
-        send_telegram_message(CHAT_ID, results_message)
-        send_telegram_message(WINNERS_CHAT_ID, results_message)
+    # --- INDEPENDENT BROADCASTING ---
+    if goals_updated:
+        send_telegram_message(CHAT_ID, goals_message)
+    if winners_updated:
+        send_telegram_message(WINNERS_CHAT_ID, winners_message)
 
 # ---------------------------------------------------------
 # 4. DATA FETCHING & AI PREDICTION
