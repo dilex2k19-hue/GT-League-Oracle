@@ -73,18 +73,30 @@ def send_telegram_message(target_chat_id, message):
         print(f"❌ Failed to send Telegram message: {e}")
 
 # ---------------------------------------------------------
-# 3. THE FEEDBACK LOOP (RESULT CHECKER)
+# 3. THE FEEDBACK LOOP (DAILY BATCH SETTLEMENT)
 # ---------------------------------------------------------
 def grade_past_predictions():
-    """Checks if our past predictions won or lost and routes them to the correct channel."""
+    """Runs ONLY at 00:30 CAT. Grades all matches chronologically from the previous 24 hours."""
+    now_cat = datetime.now(timezone.utc).astimezone(CAT_TZ)
+    
+    # --- THE TIME GATE ---
+    if not (now_cat.hour == 0 and 30 <= now_cat.minute < 50):
+        return
+
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
-    shield_time = datetime.now(timezone.utc) - timedelta(minutes=45)
+    # --- DEFINE THE 24-HOUR WINDOW (Yesterday 00:00 to 23:59 CAT) ---
+    yesterday_cat = now_cat - timedelta(days=1)
+    start_of_yesterday_cat = yesterday_cat.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_yesterday_cat = yesterday_cat.replace(hour=23, minute=59, second=59, microsecond=999999)
+    
+    start_utc = start_of_yesterday_cat.astimezone(timezone.utc)
+    end_utc = end_of_yesterday_cat.astimezone(timezone.utc)
     
     cursor.execute(
-        "SELECT * FROM predictions WHERE status = 'Pending' AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
-        (shield_time,)
+        "SELECT * FROM predictions WHERE status = 'Pending' AND kickoff_utc >= %s AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
+        (start_utc, end_utc)
     )
     pending = cursor.fetchall()
     
@@ -93,15 +105,13 @@ def grade_past_predictions():
         conn.close()
         return
 
-    print("🔍 Checking results of past predictions...")
+    print("📅 00:30 CAT Triggered: Running Daily Settlement for Yesterday's Matches...")
     
-    now_utc = datetime.now(timezone.utc)
-    start_of_day = now_utc - timedelta(days=1)
-    time_str = f"between:{start_of_day.strftime('%Y-%m-%dT%H:%M:%S.000Z')},{now_utc.strftime('%Y-%m-%dT%H:%M:%S.999Z')}"
+    time_str = f"between:{start_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')},{end_utc.strftime('%Y-%m-%dT%H:%M:%S.999Z')}"
     
     url = "https://api.gtleagues.com/api/sports/6/fixtures"
     headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Origin": "https://www.gtleagues.com",
         "Referer": "https://www.gtleagues.com/"
     }
@@ -109,16 +119,14 @@ def grade_past_predictions():
     
     response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
+        print(f"❌ Failed to reach API for daily settlement. Status: {response.status_code}")
         return
         
     finished_matches = response.json()
     
-    # --- INDEPENDENT RESULT BOARDS ---
-    goals_message = "📊 <b>OVER 2.5 RESULT UPDATE</b> 📊\n\n"
-    winners_message = "📊 <b>MATCH WINNER RESULT UPDATE</b> 📊\n\n"
-    
-    goals_updated = False
-    winners_updated = False
+    # --- TEMPORARY STORAGE FOR STRICT SORTING ---
+    goals_results_list = []
+    winners_results_list = []
     
     for p in pending:
         for m in finished_matches:
@@ -153,30 +161,44 @@ def grade_past_predictions():
                 db_utc = p['kickoff_utc']
                 if db_utc.tzinfo is None:
                     db_utc = db_utc.replace(tzinfo=timezone.utc)
-                kickoff_cat = db_utc.astimezone(CAT_TZ).strftime("%H:%M CAT")
+                kickoff_cat = db_utc.astimezone(CAT_TZ).strftime("%H:%M")
                 
-                # Format the specific result text
+                # Format the text but DON'T add it to the message yet
                 result_text = f"{icon} <b>{p['prediction']}</b> ({p['home_player']} vs {p['away_player']})\n"
-                result_text += f"⏰ Match Time: {kickoff_cat}\n"
-                result_text += f"Score: {h_score} - {a_score}\n\n"
+                result_text += f"⏰ Time: {kickoff_cat} | Score: {h_score} - {a_score}\n\n"
                 
-                # Route the text to the correct message board
+                # Store it in the list alongside its exact exact UTC datetime for perfect sorting
                 if p['prediction'] == 'Over 2.5':
-                    goals_message += result_text
-                    goals_updated = True
+                    goals_results_list.append({"time_obj": db_utc, "text": result_text})
                 else:
-                    winners_message += result_text
-                    winners_updated = True
+                    winners_results_list.append({"time_obj": db_utc, "text": result_text})
                     
                 break
 
     cursor.close()
     conn.close()
     
-    # --- INDEPENDENT BROADCASTING ---
-    if goals_updated:
+    # --- CHRONOLOGICAL SORTING & BROADCASTING ---
+    report_date = yesterday_cat.strftime('%b %d, %Y')
+    
+    if goals_results_list:
+        # Sort strictly by time_obj (oldest to newest)
+        goals_results_list.sort(key=lambda x: x["time_obj"])
+        
+        goals_message = f"📅 <b>OVER 2.5 DAILY SETTLEMENT: {report_date}</b> 📅\n\n"
+        for item in goals_results_list:
+            goals_message += item["text"]
+            
         send_telegram_message(CHAT_ID, goals_message)
-    if winners_updated:
+
+    if winners_results_list:
+        # Sort strictly by time_obj (oldest to newest)
+        winners_results_list.sort(key=lambda x: x["time_obj"])
+        
+        winners_message = f"📅 <b>MATCH WINNER DAILY SETTLEMENT: {report_date}</b> 📅\n\n"
+        for item in winners_results_list:
+            winners_message += item["text"]
+            
         send_telegram_message(WINNERS_CHAT_ID, winners_message)
 
 # ---------------------------------------------------------
