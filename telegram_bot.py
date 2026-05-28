@@ -11,9 +11,10 @@ import os
 warnings.filterwarnings("ignore", category=UserWarning)
 import feature_calculators as fc
 
-# --- TELEGRAM CREDENTIALS ---
+# --- TELEGRAM CONFIGURATION ---
 TELEGRAM_TOKEN = "8914691037:AAEldTQrOgtjEBk2vl-_RV-dBj6sJcSBU2U"
-CHAT_ID = "7678532101"
+CHAT_ID = "7678532101"              # Your primary goals channel ID
+WINNERS_CHAT_ID = "-1003320870164"  # Your private match winners channel ID
 
 # --- TIMEZONE SETUP (CAT is UTC+2) ---
 CAT_TZ = timezone(timedelta(hours=2))
@@ -34,7 +35,6 @@ def get_db_connection():
     if db_url:
         return psycopg2.connect(db_url)
     else:
-        # Local fallback so you can still run it on your laptop if needed!
         return psycopg2.connect(dbname="gt_league_db", user="postgres", password="admin123", host="localhost")
         
 def setup_database():
@@ -59,11 +59,11 @@ def setup_database():
 # ---------------------------------------------------------
 # 2. TELEGRAM BROADCASTER
 # ---------------------------------------------------------
-def send_telegram_message(message):
-    """Sends a formatted message to your phone."""
+def send_telegram_message(target_chat_id, message):
+    """Sends a formatted message to a dynamically specified channel destination."""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
-        "chat_id": CHAT_ID,
+        "chat_id": target_chat_id,
         "text": message,
         "parse_mode": "HTML"
     }
@@ -170,7 +170,7 @@ def grade_past_predictions():
     conn.close()
     
     if updates_found:
-        send_telegram_message(results_message)
+        send_telegram_message(CHAT_ID, results_message)
 
 # ---------------------------------------------------------
 # 4. DATA FETCHING & AI PREDICTION
@@ -287,16 +287,15 @@ def run_pipeline():
     setup_database()
     grade_past_predictions() # Step 1: Grade the past
     
-    # --- NEW: THE ANTI-SPAM FILTER MEMORY ---
+    # --- ANTI-SPAM FILTER MEMORY ---
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute("SELECT home_player, away_player FROM predictions WHERE status = 'Pending';")
-    pending_matchups = {(row['home_player'], row['away_player']) for row in cursor.fetchall()}
+    cursor.execute("SELECT home_player, away_player, prediction FROM predictions WHERE status = 'Pending';")
+    pending_setups = {(row['home_player'], row['away_player'], row['prediction']) for row in cursor.fetchall()}
     cursor.close()
     conn.close()
-    # ----------------------------------------
     
-    print("📡 Scanning GT Leagues for new upcoming setups...")
+    print("📡 Scanning GT Leagues for setups strictly in the next 45 minutes...")
     now_utc = datetime.now(timezone.utc)
     start_of_day = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_day = start_of_day + timedelta(days=1)
@@ -316,75 +315,94 @@ def run_pipeline():
         return
     
     data = response.json()
+    
+    # --- THE GATEKEEPER: STRICT 45-MINUTE WINDOW ---
     target_window = now_utc + timedelta(minutes=45) 
+    
     analyzed_matches = []
     
     for match in data:
         if match.get('status') == 0:
             kickoff_utc = datetime.strptime(match['kickoff'], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
             
+            # If the match is not happening in the next 45 mins, ignore it completely
             if now_utc <= kickoff_utc <= target_window:
                 home_player = match['participants'][0]['participant']['player']['nickname']
                 away_player = match['participants'][1]['participant']['player']['nickname']
                 
-                # --- NEW: SKIP IF ALREADY PREDICTED ---
-                if (home_player, away_player) in pending_matchups:
-                    continue
-                # --------------------------------------
-                
                 probs = get_predictions(home_player, away_player)
                 if probs:
+                    # Find the absolute best mathematical edge for this specific match
                     best_pick = max(probs, key=probs.get)
                     confidence = probs[best_pick]
                     
-                    # Convert UTC to Central Africa Time (CAT)
-                    kickoff_cat = kickoff_utc.astimezone(CAT_TZ)
+                    kickoff_cat = kickoff_utc.astimezone(CAT_TZ).strftime("%H:%M CAT")
                     
                     analyzed_matches.append({
                         "home": home_player, "away": away_player,
-                        "kickoff_utc": kickoff_utc,
-                        "kickoff_cat": kickoff_cat.strftime("%H:%M CAT"),
-                        "best_pick": best_pick, "confidence": confidence, "all_probs": probs
+                        "kickoff_utc": kickoff_utc, "kickoff_cat": kickoff_cat,
+                        "best_pick": best_pick, "confidence": confidence
                     })
 
     if not analyzed_matches:
-        print("⚠️ No elite setups found right now.")
+        print("⚠️ No matches found in the immediate 45-minute window.")
         return
         
+    # --- SORTING ENGINE: TAKE TOP 2 ONLY ---
     analyzed_matches.sort(key=lambda x: x['confidence'], reverse=True)
     top_picks = analyzed_matches[:2]
-    
-    # Send Telegram Broadcast & Save to DB
-    tg_message = "🏆 <b>ELITE PREDICTIONS FOUND</b> 🏆\n\n"
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    for i, match in enumerate(top_picks):
-        tg_message += f"🔥 <b>PICK #{i+1}:</b> {match['home']} vs {match['away']}\n"
-        tg_message += f"⏰ <b>Time:</b> {match['kickoff_cat']}\n"
-        tg_message += f"🎯 <b>Prediction:</b> <u>{match['best_pick']}</u> ({match['confidence']} %)\n\n"
+    for match in top_picks:
+        h_player = match['home']
+        a_player = match['away']
+        best_pick = match['best_pick']
+        conf = match['confidence']
+        k_utc = match['kickoff_utc']
+        k_cat = match['kickoff_cat']
         
-        # Save to DB memory
+        # Skip if we already sent this exact signal earlier
+        if (h_player, a_player, best_pick) in pending_setups:
+            continue
+            
+        # --- MULTI-CHANNEL ROUTER LOGIC ---
+        if best_pick == "Over 2.5":
+            msg = (
+                "🏆 <b>ELITE GOAL PREDICTION FOUND</b> 🏆\n\n"
+                f"🔥 <b>PICK:</b> {h_player} vs {a_player}\n"
+                f"⏰ <b>Time:</b> {k_cat}\n"
+                f"🎯 <b>Prediction:</b> <u>Over 2.5</u> ({conf} %)\n"
+            )
+            print(f"📲 Pushing Goals Signal: {h_player} vs {a_player} to Channel 1")
+            send_telegram_message(CHAT_ID, msg)
+        else:
+            # Route Home Win / Away Win to the Private Winners Channel
+            msg = (
+                "👑 <b>ELITE MATCH WINNER SIGNAL</b> 👑\n\n"
+                f"🔥 <b>PICK:</b> {h_player} vs {a_player}\n"
+                f"⏰ <b>Time:</b> {k_cat}\n"
+                f"🎯 <b>Prediction:</b> <u>{best_pick}</u> ({conf} %)\n"
+            )
+            print(f"📲 Pushing Winner Signal: {h_player} vs {a_player} to Channel 2")
+            send_telegram_message(WINNERS_CHAT_ID, msg)
+            
+        # Log to Database Memory
         cursor.execute("""
             INSERT INTO predictions (home_player, away_player, kickoff_utc, prediction, confidence)
             VALUES (%s, %s, %s, %s, %s)
-        """, (match['home'], match['away'], match['kickoff_utc'], match['best_pick'], match['confidence']))
+        """, (h_player, a_player, k_utc, best_pick, conf))
+        conn.commit()
         
-    conn.commit()
     cursor.close()
     conn.close()
-    
-    print("📲 Sending Elite Setups to Telegram...")
-    send_telegram_message(tg_message)
 
 if __name__ == "__main__":
-    print("🚀 GT League Oracle Bot Waking Up on GitHub...")
-    
+    print("🚀 GT League Oracle Bot Waking Up...")
     try:
         run_pipeline()
     except Exception as e:
         print(f"❌ Pipeline Error: {e}")
-        send_telegram_message(f"⚠️ <b>Oracle Error:</b> {e}")
-        
+        send_telegram_message(CHAT_ID, f"⚠️ <b>Oracle Error:</b> {e}")
     print("🏁 Run complete. Shutting down until next schedule.")
