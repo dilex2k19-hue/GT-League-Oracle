@@ -81,7 +81,14 @@ def grade_past_predictions():
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
     # Get all pending predictions from the past 24 hours
-    cursor.execute("SELECT * FROM predictions WHERE status = 'Pending';")
+    # Only select pending matches that kicked off more than 45 minutes ago
+    # This prevents the bot from mixing up games currently being played
+    shield_time = datetime.now(timezone.utc) - timedelta(minutes=45)
+    
+    cursor.execute(
+        "SELECT * FROM predictions WHERE status = 'Pending' AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
+        (shield_time,)
+    )
     pending = cursor.fetchall()
     
     if not pending:
