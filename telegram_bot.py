@@ -170,7 +170,9 @@ def grade_past_predictions():
     conn.close()
     
     if updates_found:
+        # Broadcast the exact same results summary to both channels simultaneously
         send_telegram_message(CHAT_ID, results_message)
+        send_telegram_message(WINNERS_CHAT_ID, results_message)
 
 # ---------------------------------------------------------
 # 4. DATA FETCHING & AI PREDICTION
@@ -315,47 +317,65 @@ def run_pipeline():
         return
     
     data = response.json()
-    
-    # --- THE GATEKEEPER: STRICT 45-MINUTE WINDOW ---
     target_window = now_utc + timedelta(minutes=45) 
     
-    analyzed_matches = []
+    # Separate lists for true independent market evaluation
+    goals_candidates = []
+    winners_candidates = []
     
     for match in data:
         if match.get('status') == 0:
             kickoff_utc = datetime.strptime(match['kickoff'], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
             
-            # If the match is not happening in the next 45 mins, ignore it completely
             if now_utc <= kickoff_utc <= target_window:
                 home_player = match['participants'][0]['participant']['player']['nickname']
                 away_player = match['participants'][1]['participant']['player']['nickname']
                 
                 probs = get_predictions(home_player, away_player)
                 if probs:
-                    # Find the absolute best mathematical edge for this specific match
-                    best_pick = max(probs, key=probs.get)
-                    confidence = probs[best_pick]
-                    
                     kickoff_cat = kickoff_utc.astimezone(CAT_TZ).strftime("%H:%M CAT")
                     
-                    analyzed_matches.append({
+                    # 1. Add to Goals Market Evaluation
+                    goals_candidates.append({
                         "home": home_player, "away": away_player,
                         "kickoff_utc": kickoff_utc, "kickoff_cat": kickoff_cat,
-                        "best_pick": best_pick, "confidence": confidence
+                        "best_pick": "Over 2.5", "confidence": probs["Over 2.5"]
+                    })
+                    
+                    # 2. Add to Winners Market Evaluation (Pick the stronger side)
+                    if probs["Home Win"] > probs["Away Win"]:
+                        win_pick = "Home Win"
+                        win_conf = probs["Home Win"]
+                    else:
+                        win_pick = "Away Win"
+                        win_conf = probs["Away Win"]
+                        
+                    winners_candidates.append({
+                        "home": home_player, "away": away_player,
+                        "kickoff_utc": kickoff_utc, "kickoff_cat": kickoff_cat,
+                        "best_pick": win_pick, "confidence": win_conf
                     })
 
-    if not analyzed_matches:
+    # --- INDEPENDENT SORTING ENGINE ---
+    # Sort both lists by highest confidence
+    goals_candidates.sort(key=lambda x: x['confidence'], reverse=True)
+    winners_candidates.sort(key=lambda x: x['confidence'], reverse=True)
+    
+    # Extract the Top 2 from each market
+    top_goals = goals_candidates[:2]
+    top_winners = winners_candidates[:2]
+    
+    # Combine them for processing
+    all_top_picks = top_goals + top_winners
+
+    if not all_top_picks:
         print("⚠️ No matches found in the immediate 45-minute window.")
         return
-        
-    # --- SORTING ENGINE: TAKE TOP 2 ONLY ---
-    analyzed_matches.sort(key=lambda x: x['confidence'], reverse=True)
-    top_picks = analyzed_matches[:2]
     
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    for match in top_picks:
+    for match in all_top_picks:
         h_player = match['home']
         a_player = match['away']
         best_pick = match['best_pick']
@@ -363,11 +383,11 @@ def run_pipeline():
         k_utc = match['kickoff_utc']
         k_cat = match['kickoff_cat']
         
-        # Skip if we already sent this exact signal earlier
+        # Anti-Spam: Skip if we already sent this exact signal
         if (h_player, a_player, best_pick) in pending_setups:
             continue
             
-        # --- MULTI-CHANNEL ROUTER LOGIC ---
+        # --- ROUTER LOGIC ---
         if best_pick == "Over 2.5":
             msg = (
                 "🏆 <b>ELITE GOAL PREDICTION FOUND</b> 🏆\n\n"
@@ -378,7 +398,6 @@ def run_pipeline():
             print(f"📲 Pushing Goals Signal: {h_player} vs {a_player} to Channel 1")
             send_telegram_message(CHAT_ID, msg)
         else:
-            # Route Home Win / Away Win to the Private Winners Channel
             msg = (
                 "👑 <b>ELITE MATCH WINNER SIGNAL</b> 👑\n\n"
                 f"🔥 <b>PICK:</b> {h_player} vs {a_player}\n"
