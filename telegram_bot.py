@@ -319,8 +319,9 @@ def run_pipeline():
     # --- ANTI-SPAM FILTER MEMORY ---
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cursor.execute("SELECT home_player, away_player, prediction FROM predictions WHERE status = 'Pending';")
-    pending_setups = {(row['home_player'], row['away_player'], row['prediction']) for row in cursor.fetchall()}
+    # Pull the exact kickoff time into memory so we don't block rematches later in the day
+    cursor.execute("SELECT home_player, away_player, prediction, kickoff_utc FROM predictions WHERE status = 'Pending';")
+    pending_setups = {(row['home_player'], row['away_player'], row['prediction'], row['kickoff_utc']) for row in cursor.fetchall()}
     cursor.close()
     conn.close()
     
@@ -410,8 +411,9 @@ def run_pipeline():
         k_utc = match['kickoff_utc']
         k_cat = match['kickoff_cat']
         
-        # Anti-Spam: Skip if we already sent this exact signal
-        if (h_player, a_player, best_pick) in pending_setups:
+        # Anti-Spam: Skip ONLY if we already sent this exact signal for this EXACT kickoff time
+        if (h_player, a_player, best_pick, k_utc) in pending_setups:
+            print(f"🔄 Silently skipping {h_player} vs {a_player} (Already pushed earlier for {k_cat})")
             continue
             
         # --- ROUTER LOGIC ---
