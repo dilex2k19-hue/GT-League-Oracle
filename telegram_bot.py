@@ -115,16 +115,32 @@ def grade_past_predictions():
         "Origin": "https://www.gtleagues.com",
         "Referer": "https://www.gtleagues.com/"
     }
-    params = {"kickoff": time_str, "limit": 1000, "status": "in:3"}
     
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code != 200:
-        print(f"❌ Failed to reach API for daily settlement. Status: {response.status_code}")
-        return
+    # --- NEW: THE PAGINATION HARVESTER ---
+    finished_matches = []
+    offset = 0
+    limit = 100
+    
+    print("📚 Downloading match history pages...")
+    while True:
+        params = {"kickoff": time_str, "limit": limit, "offset": offset, "status": "in:3"}
+        response = requests.get(url, headers=headers, params=params)
         
-    finished_matches = response.json()
+        if response.status_code != 200:
+            print(f"❌ Failed API fetch at offset {offset}. Status: {response.status_code}")
+            break
+            
+        data = response.json()
+        if not data: # If the page is empty, we have reached the end!
+            break
+            
+        finished_matches.extend(data)
+        offset += limit
+        time.sleep(0.5) # Be polite to the server
+        
+    print(f"📦 Successfully downloaded ALL {len(finished_matches)} finished matches from yesterday.")
     
-    # --- TEMPORARY STORAGE FOR STRICT SORTING ---
+    # --- TEMPORARY STORAGE FOR STRICT SORTING & DEDUPLICATION ---
     goals_results_list = []
     winners_results_list = []
     
@@ -163,15 +179,18 @@ def grade_past_predictions():
                     db_utc = db_utc.replace(tzinfo=timezone.utc)
                 kickoff_cat = db_utc.astimezone(CAT_TZ).strftime("%H:%M")
                 
-                # Format the text but DON'T add it to the message yet
+                # Format the text
                 result_text = f"{icon} <b>{p['prediction']}</b> ({p['home_player']} vs {p['away_player']})\n"
                 result_text += f"⏰ Time: {kickoff_cat} | Score: {h_score} - {a_score}\n\n"
                 
-                # Store it in the list alongside its exact exact UTC datetime for perfect sorting
+                # --- NEW: STRICT DEDUPLICATION ---
+                # Check if this exact text is already in our list. If so, ignore it!
                 if p['prediction'] == 'Over 2.5':
-                    goals_results_list.append({"time_obj": db_utc, "text": result_text})
+                    if not any(item['text'] == result_text for item in goals_results_list):
+                        goals_results_list.append({"time_obj": db_utc, "text": result_text})
                 else:
-                    winners_results_list.append({"time_obj": db_utc, "text": result_text})
+                    if not any(item['text'] == result_text for item in winners_results_list):
+                        winners_results_list.append({"time_obj": db_utc, "text": result_text})
                     
                 break
 
@@ -182,23 +201,17 @@ def grade_past_predictions():
     report_date = yesterday_cat.strftime('%b %d, %Y')
     
     if goals_results_list:
-        # Sort strictly by time_obj (oldest to newest)
         goals_results_list.sort(key=lambda x: x["time_obj"])
-        
         goals_message = f"📅 <b>OVER 2.5 DAILY SETTLEMENT: {report_date}</b> 📅\n\n"
         for item in goals_results_list:
             goals_message += item["text"]
-            
         send_telegram_message(CHAT_ID, goals_message)
 
     if winners_results_list:
-        # Sort strictly by time_obj (oldest to newest)
         winners_results_list.sort(key=lambda x: x["time_obj"])
-        
         winners_message = f"📅 <b>MATCH WINNER DAILY SETTLEMENT: {report_date}</b> 📅\n\n"
         for item in winners_results_list:
             winners_message += item["text"]
-            
         send_telegram_message(WINNERS_CHAT_ID, winners_message)
 
 # ---------------------------------------------------------
