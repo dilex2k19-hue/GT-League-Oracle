@@ -60,17 +60,31 @@ def setup_database():
 # 2. TELEGRAM BROADCASTER
 # ---------------------------------------------------------
 def send_telegram_message(target_chat_id, message):
-    """Sends a formatted message to a dynamically specified channel destination."""
+    """Sends a formatted message, automatically chunking if it exceeds Telegram's 4096 limit."""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": target_chat_id,
-        "text": message,
-        "parse_mode": "HTML"
-    }
-    try:
-        requests.post(url, json=payload)
-    except Exception as e:
-        print(f"❌ Failed to send Telegram message: {e}")
+    
+    # Telegram max length is 4096. We use 4000 to be safe and avoid cutting HTML tags.
+    max_length = 4000
+    
+    # Split the massive text block into safe, bite-sized chunks
+    chunks = [message[i:i+max_length] for i in range(0, len(message), max_length)]
+    
+    for chunk in chunks:
+        payload = {
+            "chat_id": target_chat_id,
+            "text": chunk,
+            "parse_mode": "HTML"
+        }
+        try:
+            response = requests.post(url, json=payload)
+            # If Telegram rejects it, print the exact reason to our GitHub logs!
+            if response.status_code != 200:
+                print(f"❌ Telegram API Error: {response.text}")
+        except Exception as e:
+            print(f"❌ Failed to send Telegram message: {e}")
+            
+        # Polite pause so Telegram doesn't block us for spamming too fast
+        time.sleep(1)
 
 # ---------------------------------------------------------
 # 3. THE FEEDBACK LOOP (DAILY BATCH SETTLEMENT)
