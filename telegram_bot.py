@@ -60,31 +60,48 @@ def setup_database():
 # 2. TELEGRAM BROADCASTER
 # ---------------------------------------------------------
 def send_telegram_message(target_chat_id, message):
-    """Sends a formatted message, automatically chunking if it exceeds Telegram's 4096 limit."""
+    """Sends a formatted message safely, chunking by match blocks so HTML tags never break."""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     
-    # Telegram max length is 4096. We use 4000 to be safe and avoid cutting HTML tags.
-    max_length = 4000
+    # Split the massive text by the double line breaks so every match stays whole
+    match_blocks = message.split('\n\n')
     
-    # Split the massive text block into safe, bite-sized chunks
-    chunks = [message[i:i+max_length] for i in range(0, len(message), max_length)]
+    current_chunk = ""
     
-    for chunk in chunks:
+    for block in match_blocks:
+        # If adding this next match pushes us over 3500 characters, send what we have first
+        if len(current_chunk) + len(block) > 3500:
+            payload = {
+                "chat_id": target_chat_id,
+                "text": current_chunk,
+                "parse_mode": "HTML"
+            }
+            try:
+                response = requests.post(url, json=payload)
+                if response.status_code != 200:
+                    print(f"❌ Telegram API Error: {response.text}")
+            except Exception as e:
+                print(f"❌ Failed to send Telegram message: {e}")
+            
+            # Reset the chunk and start with the current block
+            current_chunk = block + "\n\n"
+            time.sleep(1)  # Polite pause so Telegram doesn't block us for spamming
+        else:
+            current_chunk += block + "\n\n"
+            
+    # Send whatever is left in the final chunk
+    if current_chunk.strip():
         payload = {
             "chat_id": target_chat_id,
-            "text": chunk,
+            "text": current_chunk,
             "parse_mode": "HTML"
         }
         try:
             response = requests.post(url, json=payload)
-            # If Telegram rejects it, print the exact reason to our GitHub logs!
             if response.status_code != 200:
                 print(f"❌ Telegram API Error: {response.text}")
         except Exception as e:
             print(f"❌ Failed to send Telegram message: {e}")
-            
-        # Polite pause so Telegram doesn't block us for spamming too fast
-        time.sleep(1)
 
 # ---------------------------------------------------------
 # 3. THE FEEDBACK LOOP (DAILY BATCH SETTLEMENT)
