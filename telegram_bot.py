@@ -104,41 +104,42 @@ def send_telegram_message(target_chat_id, message):
             print(f"❌ Failed to send Telegram message: {e}")
 
 # ---------------------------------------------------------
-# 3. THE FEEDBACK LOOP (DAILY BATCH SETTLEMENT)
+# 3. THE FEEDBACK LOOP (MANUAL OVERRIDE & SCORE INJECTION)
 # ---------------------------------------------------------
 def grade_past_predictions():
-    """Runs ONLY at 00:30 CAT. Grades all matches chronologically from the previous 24 hours."""
+    """TEMPORARY MANUAL RUN: Grades matches immediately and saves exact scores."""
     now_cat = datetime.now(timezone.utc).astimezone(CAT_TZ)
     
-    # --- THE TIME GATE ---
-    if not (now_cat.hour == 0 and 30 <= now_cat.minute < 50):
-        return
+    # --- ⚠️ MANUAL OVERRIDE: THE TIME GATE IS DISABLED ⚠️ ---
+    # We commented out the return so the bot runs INSTANTLY for your dashboard test.
+    # if not (now_cat.hour == 0 and 30 <= now_cat.minute < 50):
+    #     return
 
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
-    # --- DEFINE THE 24-HOUR WINDOW (Yesterday 00:00 to 23:59 CAT) ---
-    yesterday_cat = now_cat - timedelta(days=1)
-    start_of_yesterday_cat = yesterday_cat.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_of_yesterday_cat = yesterday_cat.replace(hour=23, minute=59, second=59, microsecond=999999)
-    
-    start_utc = start_of_yesterday_cat.astimezone(timezone.utc)
-    end_utc = end_of_yesterday_cat.astimezone(timezone.utc)
-    
+    # --- CAPTURE EVERYTHING PENDING ---
+    # Look at all pending matches up until RIGHT NOW
+    now_utc = datetime.now(timezone.utc)
     cursor.execute(
-        "SELECT * FROM predictions WHERE status = 'Pending' AND kickoff_utc >= %s AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
-        (start_utc, end_utc)
+        "SELECT * FROM predictions WHERE status = 'Pending' AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
+        (now_utc,)
     )
     pending = cursor.fetchall()
     
     if not pending:
+        print("⚠️ No pending matches found to grade right now.")
         cursor.close()
         conn.close()
         return
 
-    print("📅 00:30 CAT Triggered: Running Daily Settlement for Yesterday's Matches...")
+    print(f"🔄 MANUAL OVERRIDE INITIATED: Grading {len(pending)} pending matches...")
     
-    time_str = f"between:{start_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')},{end_utc.strftime('%Y-%m-%dT%H:%M:%S.999Z')}"
+    oldest_pending_utc = pending[0]['kickoff_utc']
+    api_start_utc = oldest_pending_utc - timedelta(hours=2)
+    api_end_utc = datetime.now(timezone.utc)
+    
+    time_str = f"between:{api_start_utc.strftime('%Y-%m-%dT%H:%M:%S.000Z')},{api_end_utc.strftime('%Y-%m-%dT%H:%M:%S.999Z')}"
     
     url = "https://api.gtleagues.com/api/sports/6/fixtures"
     headers = {
@@ -147,31 +148,26 @@ def grade_past_predictions():
         "Referer": "https://www.gtleagues.com/"
     }
     
-    # --- NEW: THE PAGINATION HARVESTER ---
     finished_matches = []
     offset = 0
     limit = 100
     
-    print("📚 Downloading match history pages...")
+    print("📚 Downloading dynamic match history pages...")
     while True:
         params = {"kickoff": time_str, "limit": limit, "offset": offset, "status": "in:3"}
         response = requests.get(url, headers=headers, params=params)
         
         if response.status_code != 200:
-            print(f"❌ Failed API fetch at offset {offset}. Status: {response.status_code}")
             break
             
         data = response.json()
-        if not data: # If the page is empty, we have reached the end!
+        if not data:
             break
             
         finished_matches.extend(data)
         offset += limit
-        time.sleep(0.5) # Be polite to the server
+        time.sleep(0.5)
         
-    print(f"📦 Successfully downloaded ALL {len(finished_matches)} finished matches from yesterday.")
-    
-    # --- TEMPORARY STORAGE FOR STRICT SORTING & DEDUPLICATION ---
     goals_results_list = []
     winners_results_list = []
     
@@ -187,7 +183,7 @@ def grade_past_predictions():
                 continue
             
             time_difference = abs((db_time - m_time).total_seconds())
-            max_drift_seconds = 15 * 60
+            max_drift_seconds = 120 * 60 
             
             if p['home_player'] == h_player and p['away_player'] == a_player and time_difference <= max_drift_seconds:
                 h_score = m['result']['stats']['home_score']
@@ -202,7 +198,12 @@ def grade_past_predictions():
                 new_status = "Won" if won else "Lost"
                 icon = "✅" if won else "❌"
                 
-                cursor.execute("UPDATE predictions SET status = %s WHERE id = %s", (new_status, p['id']))
+                # --- NEW: INJECTING EXACT SCORES INTO THE DATABASE ---
+                cursor.execute("""
+                    UPDATE predictions 
+                    SET status = %s, home_score = %s, away_score = %s 
+                    WHERE id = %s
+                """, (new_status, h_score, a_score, p['id']))
                 conn.commit()
                 
                 db_utc = p['kickoff_utc']
@@ -210,12 +211,9 @@ def grade_past_predictions():
                     db_utc = db_utc.replace(tzinfo=timezone.utc)
                 kickoff_cat = db_utc.astimezone(CAT_TZ).strftime("%H:%M")
                 
-                # Format the text
                 result_text = f"{icon} <b>{p['prediction']}</b> ({p['home_player']} vs {p['away_player']})\n"
                 result_text += f"⏰ Time: {kickoff_cat} | Score: {h_score} - {a_score}\n\n"
                 
-                # --- NEW: STRICT DEDUPLICATION ---
-                # Check if this exact text is already in our list. If so, ignore it!
                 if p['prediction'] == 'Over 2.5':
                     if not any(item['text'] == result_text for item in goals_results_list):
                         goals_results_list.append({"time_obj": db_utc, "text": result_text})
@@ -228,19 +226,19 @@ def grade_past_predictions():
     cursor.close()
     conn.close()
     
-    # --- CHRONOLOGICAL SORTING & BROADCASTING ---
-    report_date = yesterday_cat.strftime('%b %d, %Y')
+    # Broadcast to Telegram
+    report_date = now_cat.strftime('%b %d, %Y (Manual Run)')
     
     if goals_results_list:
         goals_results_list.sort(key=lambda x: x["time_obj"])
-        goals_message = f"📅 <b>OVER 2.5 DAILY SETTLEMENT: {report_date}</b> 📅\n\n"
+        goals_message = f"📊 <b>MANUAL DATABASE UPDATE: OVER 2.5</b> 📊\n\n"
         for item in goals_results_list:
             goals_message += item["text"]
         send_telegram_message(CHAT_ID, goals_message)
 
     if winners_results_list:
         winners_results_list.sort(key=lambda x: x["time_obj"])
-        winners_message = f"📅 <b>MATCH WINNER DAILY SETTLEMENT: {report_date}</b> 📅\n\n"
+        winners_message = f"📊 <b>MANUAL DATABASE UPDATE: WINNERS</b> 📊\n\n"
         for item in winners_results_list:
             winners_message += item["text"]
         send_telegram_message(WINNERS_CHAT_ID, winners_message)
