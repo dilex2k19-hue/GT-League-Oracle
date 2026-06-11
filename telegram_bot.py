@@ -104,25 +104,28 @@ def send_telegram_message(target_chat_id, message):
             print(f"❌ Failed to send Telegram message: {e}")
 
 # ---------------------------------------------------------
-# 3. THE FEEDBACK LOOP (MANUAL OVERRIDE & SCORE INJECTION)
+# 3. THE FEEDBACK LOOP (DAILY BATCH SETTLEMENT)
 # ---------------------------------------------------------
 def grade_past_predictions():
-    """TEMPORARY MANUAL RUN: Grades matches immediately and saves exact scores."""
+    """Runs ONLY at 00:30 CAT. Auto-heals the database by grading all past pending matches."""
     now_cat = datetime.now(timezone.utc).astimezone(CAT_TZ)
     
-    # --- ⚠️ MANUAL OVERRIDE: THE TIME GATE IS DISABLED ⚠️ ---
-    # We commented out the return so the bot runs INSTANTLY for your dashboard test.
-    # if not (now_cat.hour == 0 and 30 <= now_cat.minute < 50):
-    #     return
+    # --- THE TIME GATE (RESTORED) ---
+    if not (now_cat.hour == 0 and 30 <= now_cat.minute < 50):
+        return
 
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
-    # --- CAPTURE EVERYTHING MISSING A SCORE ---
-    now_utc = datetime.now(timezone.utc)
+    # --- AUTO-HEALING TARGET: End of Yesterday CAT ---
+    yesterday_cat = now_cat - timedelta(days=1)
+    end_of_yesterday_cat = yesterday_cat.replace(hour=23, minute=59, second=59, microsecond=999999)
+    end_utc = end_of_yesterday_cat.astimezone(timezone.utc)
+    
+    # --- CAPTURE ONLY PENDING MATCHES (RESTORED) ---
     cursor.execute(
-        "SELECT * FROM predictions WHERE home_score IS NULL AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
-        (now_utc,)
+        "SELECT * FROM predictions WHERE status = 'Pending' AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
+        (end_utc,)
     )
     pending = cursor.fetchall()
     
