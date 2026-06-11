@@ -324,48 +324,367 @@ Select only elite predictions by scanning the live upcoming schedule.
 
 ---
 
-# Phase 9: Dashboard Development
+
+
+# Phase 9: Advanced Analytics Dashboard
 
 ## Goal
-Visualize predictions and statistics.
 
-## Dashboard Features
-- Live predictions
-- Player rankings
-- Match statistics
-- Prediction history
-- ROI tracking
-- Accuracy tracking
+Build a professional analytics platform that monitors model performance, prediction quality, player behavior, calibration accuracy, profitability, and long-term system health.
 
-## Tasks
-- [ ] Build dashboard UI
-- [ ] Connect database
-- [ ] Display live predictions
-- [ ] Display statistics charts
-- [ ] Build filters
+The dashboard should allow rapid detection of:
 
-## Status
+* Model improvements
+* Model degradation
+* Player-specific anomalies
+* Prediction confidence reliability
+* Market profitability opportunities
+* Data quality issues
+
+---
+
+# Dashboard Modules
+
+## Module 1: Live Prediction Center
+
+### Purpose
+
+Monitor all active predictions in real time.
+
+### Features
+
+* Upcoming matches
+* Predicted probability
+* Prediction confidence level
+* Model version used
+* Match countdown timer
+* Prediction status:
+
+  * Pending
+  * Won
+  * Lost
+
+### Metrics
+
+* Predictions today
+* Active predictions
+* Win rate today
+* Average confidence today
+
+---
+
+## Module 2: Prediction Accuracy Analytics
+
+### Purpose
+
+Measure actual model performance.
+
+### Metrics
+
+* Total predictions
+* Wins
+* Losses
+* Hit rate %
+* Daily accuracy
+* Weekly accuracy
+* Monthly accuracy
+
+### Charts
+
+* Accuracy over time
+* Accuracy by hour
+* Accuracy by player pool
+* Accuracy by confidence range
+
+---
+
+## Module 3: Confidence Calibration Analysis
+
+### Purpose
+
+Verify whether predicted probabilities reflect reality.
+
+### Example
+
+| Confidence Range | Wins | Losses | Actual Win Rate |
+| ---------------- | ---- | ------ | --------------- |
+| 90-100%          |      |        |                 |
+| 80-90%           |      |        |                 |
+| 70-80%           |      |        |                 |
+| 60-70%           |      |        |                 |
+| 50-60%           |      |        |                 |
+
+### Questions Answered
+
+* Do 85% predictions actually win 85% of the time?
+* Is the model overconfident?
+* Is the model underconfident?
+
+### Charts
+
+* Reliability Curve
+* Calibration Plot
+* Predicted vs Actual Win Rate
+
+---
+
+## Module 4: Player Intelligence Center
+
+### Purpose
+
+Discover player-specific patterns.
+
+### Metrics
+
+For every player:
+
+* Matches analyzed
+* Over 2.5 hit rate
+* Under 2.5 hit rate
+* Home win rate
+* Away win rate
+* Average goals scored
+* Average goals conceded
+
+### Example
+
+| Player   | Over2.5 Rate |
+| -------- | ------------ |
+| Fox      |              |
+| Doctor   |              |
+| Walnut   |              |
+| Arthur   |              |
+| Vendetta |              |
+
+### Insights
+
+Identify:
+
+* Over machines
+* Under machines
+* High-risk players
+* Model killers
+
+---
+
+## Module 5: Prediction Failure Analysis
+
+### Purpose
+
+Understand exactly why predictions fail.
+
+### Metrics
+
+* Most common losing players
+* Most common scorelines causing failure
+* Confidence of losing predictions
+* Failed prediction distribution
+
+### Example
+
+| Scoreline | Count |
+| --------- | ----- |
+| 1-1       |       |
+| 1-0       |       |
+| 0-0       |       |
+| 2-0       |       |
+
+### Insights
+
+Determine whether failures come from:
+
+* Defensive players
+* Draw-heavy players
+* Specific tournaments
+* Model blind spots
+
+---
+
+## Module 6: Profitability Simulator
+
+### Purpose
+
+Test betting strategies without risking money.
+
+### Simulations
+
+* Flat staking
+* Confidence weighted staking
+* Single bets
+* Double combos
+* Triple combos
+
+### Metrics
+
+* ROI
+* Yield
+* Total profit
+* Drawdown
+* Longest losing streak
+
+### Adjustable Parameters
+
+* Minimum confidence threshold
+* Stake size
+* Number of selections per slip
+* Odds assumptions
+
+---
+
+## Module 7: Confidence Threshold Optimizer
+
+### Purpose
+
+Find the most profitable confidence cutoff.
+
+### Example
+
+| Threshold | Accuracy |
+| --------- | -------- |
+| 50%+      |          |
+| 60%+      |          |
+| 70%+      |          |
+| 80%+      |          |
+| 85%+      |          |
+
+### Questions
+
+* Is 80% better than 70%?
+* Does accuracy improve enough to justify fewer predictions?
+
+---
+
+## Module 8: Model Health Monitor
+
+### Purpose
+
+Monitor long-term AI performance.
+
+### Metrics
+
+* Rolling 100 prediction accuracy
+* Rolling 500 prediction accuracy
+* Rolling 1000 prediction accuracy
+* Accuracy trend
+* Confidence trend
+
+### Alerts
+
+* Sudden performance drop
+* Calibration drift
+* Prediction volume anomalies
+
+---
+
+## Module 9: Feature Intelligence
+
+### Purpose
+
+Understand which features drive predictions.
+
+### Metrics
+
+* Feature importance
+* Top predictive features
+* Correlation analysis
+
+### Examples
+
+* Win rate difference
+* H2H goals
+* Over 2.5 rate
+* Goal averages
+* Streak features
+
+---
+
+## Module 10: Data Quality Monitor
+
+### Purpose
+
+Detect problems before they affect training.
+
+### Checks
+
+* Missing values
+* Duplicate matches
+* Missing player names
+* Invalid scorelines
+* Feature generation failures
+
+### Alerts
+
+* Broken pipelines
+* Empty datasets
+* Data drift
+
+---
+
+# Technology Stack
+
+Backend:
+
+* Python
+* Flask/FastAPI
+* PostgreSQL
+
+Frontend:
+
+* React
+* Next.js
+* TailwindCSS
+
+Charts:
+
+* Recharts
+* Chart.js
+
+Real-Time:
+
+* WebSockets
+
+---
+
+# Status
+
 NOT STARTED
 
----
+## Tasks
 
-# Phase 10: Automation & Alerts
+* [ ] Build backend API
+* [ ] Build dashboard database views
+* [ ] Create analytics endpoints
+* [ ] Build React dashboard
+* [ ] Add calibration module
+* [ ] Add player intelligence module
+* [ ] Add profitability simulator
+* [ ] Add feature importance analysis
+* [ ] Add model health monitoring
+* [ ] Add real-time updates
+
+
+
+# Phase 10: Automation, Data Harvesting & Fail-Safe Alerts
 
 ## Goal
-Automate the prediction workflow to run autonomously and report directly to mobile.
+Automate the quantitative prediction workflow to run completely autonomously, bulletproof against API pagination limits, scheduling shifts, message truncation, and reporting directly to twin mobile channels.
 
 ## Tasks
-- [x] Automate scraping (Integrated API scanner directly into a continuous background loop)
-- [x] Automate model predictions (Connected the 3 Scikit-Learn Specialist models to the live data feed)
-- [x] Schedule hourly predictions (Created a built-in sleep timer to scan the market every 30 minutes)
-- [x] Build Telegram alerts (Deployed the `@GTLeagueOracle_bot` to push formatted alerts to mobile)
-- [x] Build prediction logging (Created a `predictions` table in PostgreSQL to act as the bot's memory)
-- [x] Build automatic feedback loop (Engineered the bot to scan finished matches, grade its past predictions, and report Wins/Losses)
+- [x] **Automate scraping:** Integrated API scanner directly into a continuous background loop.
+- [x] **Automate model predictions:** Connected the 3 Scikit-Learn Specialist models to the live data feed.
+- [x] **Deconstruct internal triggers:** Completely stripped the laggy GitHub Actions cron scheduler to prevent double-execution bugs.
+- [x] **Deploy an unbreakable external clock:** Hooked up cron-job.org via the GitHub API to force an exact 30-minute execution pulse.
+- [x] **Implement a fluid schedule time-lock:** Upgraded the grading engine from a rigid exact-second match to a flexible 15-minute tolerance window to handle live match delays.
+- [x] **Build an anti-spam prediction filter:** Engineered memory-tracking logic that queries the PostgreSQL 'Pending' queue to eliminate duplicate Telegram messages.
+- [x] **Time-Aware Rematch Identification:** Upgraded the anti-spam filter to track `kickoff_utc` along with player IDs, ensuring the bot allows valid high-frequency player rematches later in the single day.
+- [x] **Multi-Page Pagination Harvester:** Rewrote the settlement fetcher using a dynamic `while True` loop to crawl through server pagination offsets, scraping 100% of the daily matches even when hidden beyond Page 1.
+- [x] **Smart HTML Block Chunker:** Re-engineered the Telegram broadcaster to slice heavy daily receipts at double-newline (`\n\n`) intersections instead of raw character counts, ensuring open HTML tags like `<b>` are never broken in half.
+- [x] **Dual-Channel Alert Routing:** Deployed the @GTLeagueOracle_bot to push distinct formats to twin mobile destinations: Goals Stream to Channel 1 and Match Winners to Channel 2.
+- [x] **Build prediction logging:** Created a 'predictions' table in Supabase PostgreSQL to act as the bot's cloud memory.
+- [x] **Build automatic feedback loop:** Engineered the bot to scan finished matches, grade past predictions, and broadcast transparent results with exact CAT timestamps.
 
 ## Status
-✅ COMPLETED
-
----
+✅ **ENTIRELY COMPLETED, RE-ENGINEERED & LIVE-TESTED**
 
 # DATABASE STRUCTURE
 
