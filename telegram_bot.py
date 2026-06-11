@@ -118,11 +118,10 @@ def grade_past_predictions():
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
-    # --- CAPTURE EVERYTHING PENDING ---
-    # Look at all pending matches up until RIGHT NOW
+    # --- CAPTURE EVERYTHING MISSING A SCORE ---
     now_utc = datetime.now(timezone.utc)
     cursor.execute(
-        "SELECT * FROM predictions WHERE status = 'Pending' AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
+        "SELECT * FROM predictions WHERE home_score IS NULL AND kickoff_utc <= %s ORDER BY kickoff_utc ASC;",
         (now_utc,)
     )
     pending = cursor.fetchall()
@@ -186,8 +185,14 @@ def grade_past_predictions():
             max_drift_seconds = 120 * 60 
             
             if p['home_player'] == h_player and p['away_player'] == a_player and time_difference <= max_drift_seconds:
-                h_score = m['result']['stats']['home_score']
-                a_score = m['result']['stats']['away_score']
+                # Safely extract scores, catching empty data without crashing
+                h_score = m.get('result', {}).get('stats', {}).get('home_score')
+                a_score = m.get('result', {}).get('stats', {}).get('away_score')
+                
+                # The Shield: If the match was canceled/voided and has no score, completely skip it
+                if h_score is None or a_score is None:
+                    continue
+                    
                 total_goals = h_score + a_score
                 
                 won = False
