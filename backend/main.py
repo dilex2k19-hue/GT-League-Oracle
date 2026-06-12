@@ -607,3 +607,5 @@ def get_data_quality():
     ]
 
     return {"checks": checks, "alerts": alerts}
+
+    # Fixing Render deployment lock
